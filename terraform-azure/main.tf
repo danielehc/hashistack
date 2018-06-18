@@ -65,7 +65,7 @@ module "consul_azure_east" {
   location                  = "East US"
   cluster_size              = "${var.cluster_size}"
   consul_datacenter         = "ll-consul-eastus"
-  custom_image_id           = "${var.custom_image_id_west}"
+  custom_image_id           = "${var.custom_image_id_east}"
   os                        = "${var.os}"
   vm_size                   = "${var.consul_vm_size}"
   private_subnet_ids        = ["${module.network_east.subnet_private_ids}"]
