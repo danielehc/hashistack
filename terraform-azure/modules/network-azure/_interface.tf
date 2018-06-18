@@ -61,3 +61,11 @@ output "subnet_public_ids" {
 output "subnet_private_ids" {
   value = ["${azurerm_subnet.private.*.id}"]
 }
+
+output "network_name" {
+  value = "${azurerm_virtual_network.main.name}"
+}
+
+output "network_id" {
+  value = "${azurerm_virtual_network.main.id}"
+}

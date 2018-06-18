@@ -61,10 +61,6 @@ variable "auto_join_tenant_id" {
 }
 
 # Outputs
-output "consul_private_ips" {
-  value = ["${azurerm_network_interface.consul.*.private_ip_address}"]
-}
-
 output "os_user" {
   value = "${module.images.os_user}"
 }

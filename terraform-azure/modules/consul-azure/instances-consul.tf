@@ -1,31 +1,89 @@
-resource "azurerm_virtual_machine" "consul" {
-  count = "${length(var.network_cidrs_private)}"
+data "template_file" "init" {
+  template = "${file("${path.module}/init-cluster.tpl")}"
 
-  name                  = "${var.consul_datacenter}-${count.index}"
-  location              = "${var.location}"
-  resource_group_name   = "${var.resource_group_name}"
-  network_interface_ids = ["${element(azurerm_network_interface.consul.*.id,count.index)}"]
-  vm_size               = "${var.vm_size}"
+  vars = {
+    cluster_size                = "${var.cluster_size}"
+    consul_datacenter           = "${var.consul_datacenter}"
+    auto_join_subscription_id   = "${var.auto_join_subscription_id}"
+    auto_join_tenant_id         = "${var.auto_join_tenant_id}"
+    auto_join_client_id         = "${var.auto_join_client_id}"
+    auto_join_secret_access_key = "${var.auto_join_client_secret}"
+  }
+}
 
-  # Uncomment this line to delete the OS disk automatically when deleting the VM
-  delete_os_disk_on_termination = true
 
-  # Uncomment this line to delete the data disks automatically when deleting the VM
-  delete_data_disks_on_termination = true
 
-  storage_image_reference {
-    id = "${var.custom_image_id}"
+resource "azurerm_public_ip" "hashistack-lb-ip" {
+  name                         = "${var.consul_datacenter}-lb-ip"
+  location                     = "${var.location}"
+  resource_group_name          = "${var.resource_group_name}"
+  public_ip_address_allocation = "static"
+  domain_name_label            = "${var.environment_name}"
+}
+
+resource "azurerm_lb" "hashistack-lb" {
+  name                = "${var.consul_datacenter}-lb"
+  location            = "${var.location}"
+  resource_group_name = "${var.resource_group_name}"
+
+  frontend_ip_configuration {
+    name                 = "PublicIPAddress"
+    public_ip_address_id = "${azurerm_public_ip.hashistack-lb-ip.id}"
+  }
+}
+
+resource "azurerm_lb_backend_address_pool" "hashistack-bpepool" {
+  resource_group_name = "${var.resource_group_name}"
+  loadbalancer_id     = "${azurerm_lb.hashistack-lb.id}"
+  name                = "BackEndAddressPool"
+}
+
+resource "azurerm_lb_rule" "vault" {
+  resource_group_name            = "${var.resource_group_name}"
+  loadbalancer_id                = "${azurerm_lb.hashistack-lb.id}"
+  name                           = "Vault"
+  protocol                       = "Tcp"
+  frontend_port                  = 8200
+  backend_port                   = 8200
+  frontend_ip_configuration_name = "PublicIPAddress"
+  backend_address_pool_id        = "${azurerm_lb_backend_address_pool.hashistack-bpepool.id}"
+  probe_id                       = "${azurerm_lb_probe.vault.id}"
+}
+
+resource "azurerm_lb_probe" "vault" {
+  resource_group_name = "${var.resource_group_name}"
+  loadbalancer_id     = "${azurerm_lb.hashistack-lb.id}"
+  protocol            = "http"
+  name                = "vault"
+  port                = 8200
+  request_path        = "/v1/sys/health"
+
+}
+
+resource "azurerm_virtual_machine_scale_set" "hashistack" {
+  name                = "${var.environment_name}-ss"
+  location            = "${var.location}"
+  resource_group_name = "${var.resource_group_name}"
+  upgrade_policy_mode = "Manual"
+
+  sku {
+    name     = "Standard_A0"
+    tier     = "Standard"
+    capacity = 3
   }
 
-  storage_os_disk {
-    name              = "${var.consul_datacenter}-${count.index}"
+  storage_profile_image_reference {
+    id      =  "${var.custom_image_id}"
+  }
+
+  storage_profile_os_disk {
     caching           = "ReadWrite"
     create_option     = "FromImage"
     managed_disk_type = "Standard_LRS"
   }
 
   os_profile {
-    computer_name  = "${var.consul_datacenter}-${count.index}"
+    computer_name_prefix = "hashistack"
     admin_username = "${module.images.os_user}"
     admin_password = "none"
     custom_data    = "${base64encode(data.template_file.init.rendered)}"
@@ -40,40 +98,20 @@ resource "azurerm_virtual_machine" "consul" {
     }
   }
 
-  tags {
-    environment_name  = "${var.environment_name}"
-    consul_datacenter = "${var.consul_datacenter}"
-  }
-}
+  network_profile {
+    name    = "${var.environment_name}-profile"
+    primary = true
 
-resource "azurerm_network_interface" "consul" {
-  count = "${length(var.network_cidrs_private)}"
-
-  name                = "${var.consul_datacenter}-${count.index}"
-  location            = "${var.location}"
-  resource_group_name = "${var.resource_group_name}"
-
-  ip_configuration {
-    name                          = "${var.consul_datacenter}-${count.index}"
-    subnet_id                     = "${element(var.private_subnet_ids,count.index)}"
-    private_ip_address_allocation = "dynamic"
+    ip_configuration {
+      name                                   = "PublicIPAddress"
+      subnet_id                              = "${var.private_subnet_ids[0]}"
+      load_balancer_backend_address_pool_ids = ["${azurerm_lb_backend_address_pool.hashistack-bpepool.id}"]
+    }
   }
 
   tags {
     environment_name  = "${var.environment_name}"
     consul_datacenter = "${var.consul_datacenter}"
   }
-}
 
-data "template_file" "init" {
-  template = "${file("${path.module}/init-cluster.tpl")}"
-
-  vars = {
-    cluster_size                = "${var.cluster_size}"
-    consul_datacenter           = "${var.consul_datacenter}"
-    auto_join_subscription_id   = "${var.auto_join_subscription_id}"
-    auto_join_tenant_id         = "${var.auto_join_tenant_id}"
-    auto_join_client_id         = "${var.auto_join_client_id}"
-    auto_join_secret_access_key = "${var.auto_join_client_secret}"
-  }
 }

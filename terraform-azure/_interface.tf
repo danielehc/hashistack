@@ -1,8 +1,11 @@
 # Required variables
 
-variable "custom_image_id" {
+variable "custom_image_id_west" {
   type        = "string"
-  description = "Azure image ID for custom Packer image"
+}
+
+variable "custom_image_id_east" {
+  type        = "string"
 }
 
 variable "auto_join_subscription_id" {
@@ -23,7 +26,6 @@ variable "auto_join_tenant_id" {
 
 # Optional variables
 variable "environment_name" {
-  default     = "consul"
   description = "Environment Name"
 }
 
@@ -87,10 +89,10 @@ variable "private_key_filename" {
 }
 
 # Outputs
-output "jumphost_ssh_connection_strings" {
-  value = "${formatlist("ssh-add %s && ssh -A -i %s %s@%s", var.private_key_filename, var.private_key_filename, module.network.jumphost_username, module.network.jumphost_ips_public)}"
+output "jumphost_ssh_connection_strings_west" {
+  value = "${formatlist("ssh-add %s && ssh -A -i %s %s@%s", var.private_key_filename, var.private_key_filename, module.network_west.jumphost_username, module.network_west.jumphost_ips_public)}"
 }
 
-output "consul_private_ips" {
-  value = "${formatlist("ssh %s@%s", module.consul_azure.os_user, module.consul_azure.consul_private_ips)}"
+output "jumphost_ssh_connection_strings_east" {
+  value = "${formatlist("ssh-add %s && ssh -A -i %s %s@%s", var.private_key_filename, var.private_key_filename, module.network_east.jumphost_username, module.network_east.jumphost_ips_public)}"
 }
